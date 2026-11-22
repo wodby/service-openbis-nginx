@@ -1,0 +1,50 @@
+name: openbis-nginx
+type: service
+from: nginx-proxy
+guidance: GUIDANCE.md
+fromVersionConstraint: "^1.0.0"
+fromVersion: "1.2.6"
+title: Nginx (openBIS)
+
+labels:
+- openbis
+
+links:
+- name: backend
+  title: openBIS
+  selectors:
+  - type: service
+    labels:
+    - openbis
+
+# Uploads and exports of large data sets can take long, so requests are allowed
+# up to an hour through the gateway.
+endpoints:
+- name: http
+  ports:
+  - name: http
+    number: 80
+    protocol: http
+    main: true
+    routeDefaults:
+      https_redirect: 'true'
+      request_timeout: 1h
+      backend_request_timeout: 1h
+
+# openBIS's rules replace the image's http-proxy preset. The service keeps the
+# preset name http-proxy, which also makes the image point the app_server
+# upstream at the linked openBIS application server.
+configs:
+- name: preset
+  title: openBIS preset
+  filepath: /etc/gotpl/presets/http-proxy.conf.tmpl
+  config: preset.conf.tmpl
+
+env:
+# The image's defaults serve some paths, such as /favicon.ico and video files,
+# from disk and forbid framing; openBIS answers them itself.
+- name: NGINX_VHOST_NO_DEFAULTS
+  value: '1'
+# No upload size limit; the preset sets client_max_body_size 0 for every path.
+- name: NGINX_CLIENT_MAX_BODY_SIZE
+  value: '0'

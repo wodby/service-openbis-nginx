@@ -1,0 +1,55 @@
+# openBIS behind Nginx: the application server, data store server and file
+# server answer under their own paths on separate ports of the linked openBIS
+# service. Everything else goes to the lab notebook.
+
+# Wodby's gateway terminates TLS, so the scheme and client address it saw are
+# passed on.
+set $openbis_forwarded_proto $scheme;
+if ($http_x_forwarded_proto) {
+    set $openbis_forwarded_proto $http_x_forwarded_proto;
+}
+
+proxy_set_header Host $http_host;
+proxy_set_header X-Forwarded-Host $http_host;
+proxy_set_header X-Forwarded-Proto $openbis_forwarded_proto;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_redirect off;
+proxy_http_version 1.1;
+
+# Data sets and files can be large: uploads and downloads stream through
+# without a size limit or buffering on disk.
+client_max_body_size 0;
+proxy_request_buffering off;
+proxy_buffering off;
+proxy_connect_timeout 60s;
+proxy_send_timeout {{ getenv "NGINX_OPENBIS_PROXY_TIMEOUT" "3600s" }};
+proxy_read_timeout {{ getenv "NGINX_OPENBIS_PROXY_TIMEOUT" "3600s" }};
+
+# A relative redirect: Nginx sees plain HTTP behind the gateway and would
+# otherwise build an http:// address.
+location = / {
+    absolute_redirect off;
+    return 302 /openbis/webapp/eln-lims/;
+}
+
+location /openbis {
+    proxy_pass http://app_server;
+}
+
+location /datastore_server {
+    proxy_pass http://{{ getenv "NGINX_BACKEND_HOST" }}:{{ getenv "NGINX_OPENBIS_DSS_PORT" "8081" }};
+}
+
+location /afs-server {
+    proxy_pass http://{{ getenv "NGINX_BACKEND_HOST" }}:{{ getenv "NGINX_OPENBIS_AFS_PORT" "8085" }};
+}
+
+location = /.healthz {
+    access_log off;
+    return 204;
+}
+
+location / {
+    return 404;
+}
